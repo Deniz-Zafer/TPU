@@ -20,6 +20,8 @@ module Sequencer
 
     // host
     input  logic                         start,
+    input  logic                         accumulate,
+    input  logic                         last_tile,
     input  logic [$clog2(A_DEPTH):0]     input_vector_count,
     input  logic [$clog2(W_DEPTH)-1:0]   weight_base,
     input  logic [$clog2(A_DEPTH)-1:0]   act_base,
@@ -38,7 +40,8 @@ module Sequencer
     output logic                         result_we,
     output logic [$clog2(R_DEPTH)-1:0]   result_waddr,
     output logic                         act_swap,
-    output logic                         result_swap
+    output logic                         result_swap,
+    output logic                         result_accumulate
 );
 
     localparam int W_AW = $clog2(W_DEPTH);
@@ -60,6 +63,7 @@ module Sequencer
     logic [W_AW-1:0] weight_base_q;
     logic [A_AW-1:0] act_base_q;
     logic [R_AW-1:0] result_base_q;
+    logic accumulate_q, last_tile_q;
 
     // ------------------------------------------------------------
     // 1) Durum makinesi + sayaclar
@@ -74,11 +78,15 @@ module Sequencer
             weight_base_q <= '0;
             act_base_q    <= '0;
             result_base_q <= '0;
+            last_tile_q   <= '0;
+            accumulate_q  <= '0;
         end else begin
             case (state)
                 STATE_IDLE: begin
                     cnt <= '0;
                     if (start && input_vector_count != '0) begin
+                        last_tile_q   <= last_tile;
+                        accumulate_q  <= accumulate; 
                         m_q           <= input_vector_count;
                         weight_base_q <= weight_base;
                         act_base_q    <= act_base;
@@ -147,8 +155,9 @@ module Sequencer
     // "compute bankasi" olur (LOAD 8 cycle surdugu icin STREAM'den cok once oturur).
     // Sonuc bankasi islem bitince (DONE) yer degistirir: host biten sonucu okuyabilsin.
     assign act_swap    = (state == STATE_LOAD) && (cnt == '0);
-    assign result_swap = (state == STATE_DONE);
+    assign result_swap = (state == STATE_DONE) && last_tile_q;
 
+    assign result_accumulate = accumulate_q;
     assign busy = (state != STATE_IDLE);
 
     // ------------------------------------------------------------

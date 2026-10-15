@@ -5,12 +5,17 @@
 // Ayni adrese ayni cycle'da yazma+okuma olursa okuma ESKI degeri verir.
 // Bellek reset'lenmez: yazilmamis satirlar sim'de X okunur.
 // ============================================================
+// accumulate=1 iken yazma "uzerine yaz" degil "eski degere ekle" olur.
+// Ekleme SUTUN SUTUN yapilir (LANE_W bit'lik parcalar): bir sutundan tasan elde
+// yandaki sutuna gecmesin diye. Biriktirme kullanilmayacaksa LANE_W = WIDTH birakilir.
 module Simple_RAM #(
-    parameter int WIDTH = 64,
-    parameter int DEPTH = 64
+    parameter int WIDTH  = 64,
+    parameter int LANE_W = WIDTH,
+    parameter int DEPTH  = 64
 )(
     input  logic                      clk,
     input  logic                      we,
+    input  logic                      accumulate,
     input  logic [$clog2(DEPTH)-1:0]  waddr,
     input  logic [WIDTH-1:0]          wdata,
     input  logic [$clog2(DEPTH)-1:0]  raddr,
@@ -20,7 +25,15 @@ module Simple_RAM #(
     logic [WIDTH-1:0] mem [DEPTH];
 
     always_ff @(posedge clk) begin
-        if (we) mem[waddr] <= wdata;
+        if (we) begin
+            if (!accumulate) begin
+                mem[waddr] <= wdata;
+            end else begin
+                for (int l = 0; l < WIDTH/LANE_W; l++)
+                    mem[waddr][l*LANE_W +: LANE_W] <= mem[waddr][l*LANE_W +: LANE_W]
+                                                    + wdata[l*LANE_W +: LANE_W];
+            end
+        end
         rdata <= mem[raddr];
     end
 
@@ -61,7 +74,8 @@ module Weight_Buffer
         .waddr(waddr),
         .wdata(wword),
         .raddr(raddr),
-        .rdata(rword)
+        .rdata(rword),
+        .accumulate(1'b0)
     );
 
 endmodule
@@ -129,7 +143,8 @@ module Act_Buffer
             .waddr(waddr),
             .wdata(wword),
             .raddr(raddr),
-            .rdata(rword[b])
+            .rdata(rword[b]),
+            .accumulate(1'b0)
         );
     end
 
@@ -154,6 +169,8 @@ module Result_Buffer
     input  logic                      rst_n,
 
     input  logic                      swap,
+    
+    input  logic                      accumulate,
 
     input  logic                      we,
     input  logic [$clog2(DEPTH)-1:0]  waddr,
@@ -190,13 +207,14 @@ module Result_Buffer
     assign rword_sel = rd_bank_q ? rword[1] : rword[0];
 
     for (genvar b = 0; b < 2; b++) begin : G_BANK
-        Simple_RAM #(.WIDTH(N*ACC_W), .DEPTH(DEPTH)) bank (
+        Simple_RAM #(.WIDTH(N*ACC_W), .LANE_W(ACC_W), .DEPTH(DEPTH)) bank (
             .clk  (clk),
             .we   (we && (sel == b[0])),    // yazma bankasi = sel
             .waddr(waddr),
             .wdata(wword),
             .raddr(raddr),
-            .rdata(rword[b])
+            .rdata(rword[b]),
+            .accumulate(accumulate)
         );
     end
 
@@ -247,6 +265,7 @@ module Memory
 
     // ---------------- Result_Buffer (ping-pong) ----------------
     input  logic                       r_swap,
+    input  logic                       r_accumulate,         // 1: yazma = eski degere ekle
     // CORE: yazma (yazma bankasina)
     input  logic                       r_we,
     input  logic [$clog2(R_DEPTH)-1:0] r_waddr,
@@ -287,7 +306,8 @@ module Memory
         .wdata     (r_wdata),
         .raddr     (r_raddr),
         .rdata     (r_rdata),
-        .write_bank(r_write_bank)
+        .write_bank(r_write_bank),
+        .accumulate(r_accumulate)
     );
 
 endmodule

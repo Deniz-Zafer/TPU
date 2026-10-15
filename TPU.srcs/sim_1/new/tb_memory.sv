@@ -18,7 +18,7 @@ module tb_memory;
     logic       a_swap, a_we, a_bank;
     logic [3:0] a_waddr, a_raddr;
     act_t       a_wdata [N], a_rdata [N];
-    logic       r_swap, r_we, r_bank;
+    logic       r_swap, r_we, r_bank, r_acc = 0;
     logic [3:0] r_waddr, r_raddr;
     acc_t       r_wdata [N], r_rdata [N];
 
@@ -26,7 +26,7 @@ module tb_memory;
         .clk(clk), .rst_n(rst_n),
         .w_we(w_we), .w_waddr(w_waddr), .w_wdata(w_wdata), .w_raddr(w_raddr), .w_rdata(w_rdata),
         .a_swap(a_swap), .a_we(a_we), .a_waddr(a_waddr), .a_wdata(a_wdata), .a_raddr(a_raddr), .a_rdata(a_rdata), .a_compute_bank(a_bank),
-        .r_swap(r_swap), .r_we(r_we), .r_waddr(r_waddr), .r_wdata(r_wdata), .r_raddr(r_raddr), .r_rdata(r_rdata), .r_write_bank(r_bank)
+        .r_swap(r_swap), .r_accumulate(r_acc), .r_we(r_we), .r_waddr(r_waddr), .r_wdata(r_wdata), .r_raddr(r_raddr), .r_rdata(r_rdata), .r_write_bank(r_bank)
     );
 
     function automatic act_t wv(int i, int c);  return act_t'(i*10 + c - 40);           endfunction
@@ -62,7 +62,7 @@ module tb_memory;
         end
         w_we = 0;
         for (int k = 0; k < 8; k++) begin
-            int row = 7 - k;
+            automatic int row = 7 - k;
             w_raddr = row;
             @(posedge clk); #1;
             for (int c = 0; c < N; c++) begin
@@ -138,6 +138,32 @@ module tb_memory;
                 if (r_rdata[c] !== r2(t, c)) begin
                     errors++;
                     if (errors < 12) $display("MISMATCH RES_R2 t=%0d c=%0d got=%0d exp=%0d", t, c, r_rdata[c], r2(t, c));
+                end
+            end
+            @(negedge clk);
+        end
+
+        // ===== 4) Result_Buffer BIRIKTIRME: R1 (uzerine yaz) + R2 (ekle) + R1 (ekle) =====
+        // Swap yok: uc "tile" ayni yazma bankasinda toplanir. Negatif/pozitif karisik
+        // degerler sutunlar arasi elde (carry) hatasini yakalar.
+        for (int pass = 0; pass < 3; pass++) begin
+            r_acc = (pass != 0);
+            for (int t = 0; t < 10; t++) begin
+                r_we = 1; r_waddr = t;
+                for (int c = 0; c < N; c++) r_wdata[c] = (pass == 1) ? r2(t, c) : r1(t, c);
+                @(negedge clk);
+            end
+        end
+        r_we = 0; r_acc = 0;
+        r_swap = 1; @(negedge clk); r_swap = 0;
+        for (int t = 0; t < 10; t++) begin
+            r_raddr = t;
+            @(posedge clk); #1;
+            for (int c = 0; c < N; c++) begin
+                checked++;
+                if (r_rdata[c] !== acc_t'(2*r1(t, c) + r2(t, c))) begin
+                    errors++;
+                    if (errors < 12) $display("MISMATCH ACC t=%0d c=%0d got=%0d exp=%0d", t, c, r_rdata[c], 2*r1(t, c) + r2(t, c));
                 end
             end
             @(negedge clk);

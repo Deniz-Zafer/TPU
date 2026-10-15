@@ -41,7 +41,7 @@ module tb_sequencer;
     logic       act_valid, result_valid;
     logic [5:0] weight_raddr;
     logic [7:0] act_raddr, result_waddr;
-    logic       result_we, act_swap, result_swap;
+    logic       result_we, act_swap, result_swap, result_accumulate;
 
     // Memory <-> Systolic_Arr
     act_t       w_rdata [N], a_rdata [N];
@@ -54,7 +54,7 @@ module tb_sequencer;
         .a_swap(act_swap), .a_we(a_we), .a_waddr(a_waddr), .a_wdata(a_wdata), .a_raddr(act_raddr),
         .a_rdata(a_rdata), .a_compute_bank(a_bank),
         .r_swap(result_swap), .r_we(result_we), .r_waddr(result_waddr), .r_wdata(result_out_arr),
-        .r_raddr(r_raddr), .r_rdata(r_rdata), .r_write_bank(r_bank)
+        .r_accumulate(result_accumulate), .r_raddr(r_raddr), .r_rdata(r_rdata), .r_write_bank(r_bank)
     );
 
     Systolic_Arr arr (
@@ -68,7 +68,8 @@ module tb_sequencer;
         .weight_base(weight_base), .act_base(act_base), .result_base(result_base),
         .busy(busy), .done(done), .mode(mode), .act_valid(act_valid), .result_valid(result_valid),
         .weight_raddr(weight_raddr), .act_raddr(act_raddr), .result_we(result_we),
-        .result_waddr(result_waddr), .act_swap(act_swap), .result_swap(result_swap)
+        .result_waddr(result_waddr), .act_swap(act_swap), .result_swap(result_swap),
+        .accumulate(1'b0), .last_tile(1'b1), .result_accumulate(result_accumulate)
     );
 
     act_t Wall [RUNS][N][N];
